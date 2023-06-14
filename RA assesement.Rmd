@@ -1,0 +1,95 @@
+---
+title: "RA assesement"
+author: "Yidan Chen"
+date: "2023-06-14"
+output: html_document
+---
+```{r}
+setwd("/Users/chenyidan/Downloads")
+df <- read.csv("ra_test_data.csv")
+```
+
+```{r}
+#install.packages("tidyverse")
+#install.packages("readr")
+library(readr) #read the data of csv format
+library(tidyverse)# provide key data transformation functions
+library(dplyr)# a grammar of data manipulation
+library(ggplot2)# a system for declaratively creating graphics
+```
+
+Q1
+```{r}
+# To estimate the effect of the treatment, I would use Difference-in-Differences (DiD) method.
+# For this question, I have panel data 
+install.packages("plm")
+library(plm) # for DiD analysis
+# Convert the data to a panel data format
+pdata <- pdata.frame(df, index = c("unit","period"))
+
+# Run the DiD regression model
+did_model <- plm(y ~ trt*post, data = pdata, model = "within")
+
+# Print the summary of the model
+summary(did_model)
+
+# the treatment effect is -0.54549
+# y = β0 + β1*trt + β2*post + β3*(trt*post) + error 
+# β3 is the estimator of the treatment effect
+```
+Q2
+The diagnostic check plots I would use are:
+1. Residuals vs Fitted plot: This will check the linearity and homoscedasticity assumptions of the model
+2. Pre-treatment Trends plot: check the parallel trend assumption
+```{r}
+residuals <- residuals(did_model)
+fitted_values <- fitted.values(did_model)
+
+# Create a data frame
+df_resid_fitted <- data.frame(residuals, fitted_values)
+
+# the first diagnostic plot
+ggplot(df_resid_fitted, aes(x = fitted_values, y = residuals)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  labs(x = "Fitted Values", y = "Residuals", title = "Residuals vs Fitted Plot")
+
+```
+```{r}
+# Create a grouped dataframe
+df_grouped <- df%>%
+  group_by(period, trt) %>%
+  summarise(y = mean(y, na.rm = TRUE), .groups = "drop")
+
+# Create the plot
+ggplot(df_grouped, aes(x = period, y = y, color = as.factor(trt))) +
+  geom_line() +
+  labs(x = "Time Period", y = "Average Outcome", color = "Treatment Group", title = "Pre-treatment Trends")
+
+# we can see that there is approximately parallel trends between the treatment group and the control group in the pre-treatment period
+
+```
+Q3
+```{r}
+# Define function to estimate coefficients from model
+coef_est <- function(df, indices) {
+  data <- df[indices, ]  # Resample the data with replacement
+  pdata <- pdata.frame(df, index = c("unit", "period"))
+  model <- plm(y ~ trt * post, data = pdata, model = "within")
+  return(coef(model))
+}
+
+# Perform bootstrap resampling
+set.seed(123)  # For reproducibility
+bootstrap_results <- boot(data = df, statistic = coef_est, R = 1000)
+
+# bootstrap standard errors
+bootstrap_se <- boot.ci(bootstrap_results, type = "norm")$normal[, 4:5]
+
+print(bootstrap_se)
+
+# There is an error when implement this bootstrap but the logic follows the above code
+
+
+```
+
